@@ -1,6 +1,6 @@
 import unittest
 import numpy as np
-from graphix.kraus import *
+from graphix.kraus import Channel, create_dephasing_channel, create_depolarising_channel
 from graphix.ops import Ops
 
 
@@ -10,7 +10,7 @@ class TestChannel(unittest.TestCase):
     def test_init_with_data_success(self):
         "test for successful intialization"
         # TODO generate random data?
-        prob = 0.75
+        prob = np.random.rand()
         mychannel = Channel(
             [
                 {"parameter": np.sqrt(1 - prob), "operator": np.array([[1.0, 0.0], [0.0, 1.0]])},
@@ -26,7 +26,7 @@ class TestChannel(unittest.TestCase):
         "test for unsuccessful intialization"
         # TODO generate random data.
 
-        prob = 0.75
+        prob = np.random.rand()
 
         # empty data
         with self.assertRaises(ValueError):

@@ -28,7 +28,7 @@ class DensityMatrix:
                 self.rho = np.ones(2 ** (2 * nqubit)).reshape(2**nqubit, 2**nqubit) / 2**nqubit
             else:
                 self.rho = np.zeros(2 ** (2 * nqubit)).reshape(2**nqubit, 2**nqubit)
-                self.rho[0, 0] = 1
+                self.rho[0, 0] = 1.0
         else:
             if isinstance(data, DensityMatrix):
                 data = data.rho
