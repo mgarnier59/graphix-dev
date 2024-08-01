@@ -585,6 +585,11 @@ class BaseGraphState(ABC):
         ------
         ValueError
             if the parameter edge is not an edge of the graph.
+
+        See Also
+        --------
+        pivot_alt:
+            Alternative implementation.
         """
         # TODO Network use has_edge
         # https://networkx.org/documentation/stable/reference/classes/generated/networkx.Graph.has_edge.html
@@ -617,6 +622,11 @@ class BaseGraphState(ABC):
         ------
         ValueError
             if the parameter edge is not an edge of the graph.
+
+        See Also
+        --------
+        pivot:
+            Alternative implementation.
         """
         # if edge not in self.edges:
         if edge not in self.edges and edge[::-1] not in set(self.edges):
@@ -667,7 +677,7 @@ class BaseGraphState(ABC):
 
     # doesn't need to be abstract since only depend on flips sign/fill and (local) complementation?
     def pivot_cz_tmp(self, edge: tuple[int, int]) -> None:
-        """Modified pivoting (a.k.a local complementation along an edge) for CZ gate application [1]_. We use the formulation from Backens et al. [2]_.
+        """Modified pivoting (a.k.a local complementation along an edge) for CZ gate application [1]_. We use the alternative formulation from [1]_ [2]_.
         Should only be applied to two hollow nodes. Note that in reduced graph form, two hollow nodes are _never_ connected [1]_.
 
         .. [1] Elliott et al., "Graphical description of the action of Clifford operators on stabilizer states", Phys. Rev. A, 77(4), Appendix and top of right column, p. 5.
@@ -684,6 +694,10 @@ class BaseGraphState(ABC):
         ----------
         None
 
+        See Also
+        --------
+        pivot_alt:
+            original implementation
         """
         node1 = edge[0]
         node2 = edge[1]
