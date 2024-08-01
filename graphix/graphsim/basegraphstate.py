@@ -462,7 +462,7 @@ class BaseGraphState(ABC):
 
         # rule 10: two nodes are hollow (mutually exclusive with rules 8 and 9)
         elif self.nodes[node1]["hollow"] and self.nodes[node2]["hollow"]:
-            # back here HERE
+            # back here HERE when pivot_cz implemented.
             pass
 
         return
@@ -675,6 +675,7 @@ class BaseGraphState(ABC):
 
         return
 
+    # RESTART HERE
     # doesn't need to be abstract since only depend on flips sign/fill and (local) complementation?
     def pivot_cz_tmp(self, edge: tuple[int, int]) -> None:
         """Modified pivoting (a.k.a local complementation along an edge) for CZ gate application [1]_. We use the alternative formulation from [1]_ [2]_.
