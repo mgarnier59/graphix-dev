@@ -167,6 +167,24 @@ class TestGraphSim:
         gstate3 = get_state(g)
         assert np.abs(np.dot(gstate.flatten().conjugate(), gstate3.flatten())) == pytest.approx(1)
 
+    def test_complement_remove(self, use_rustworkx: bool) -> None:
+        nqubit = 6
+        edges = [(0, 1), (1, 2), (2, 3), (3, 4), (4, 0)]
+        exp_edges = [(1, 2), (2, 3), (3, 4), (4, 0)]
+        g = GraphState(nodes=np.arange(nqubit), edges=edges, use_rustworkx=use_rustworkx)
+        g.complement([0,1])
+        exp_g = GraphState(nodes=np.arange(nqubit), edges=exp_edges)
+        assert is_graphs_equal(g, exp_g)
+
+    def test_complement_add(self, use_rustworkx: bool) -> None:
+        nqubit = 6
+        edges = [(0, 1), (1, 2), (2, 3), (3, 4), (4, 0)]
+        exp_edges = [(0, 1), (1, 2), (2, 3), (3, 4), (4, 0), (1, 4)]
+        g = GraphState(nodes=np.arange(nqubit), edges=edges, use_rustworkx=use_rustworkx)
+        g.complement([1, 4])
+        exp_g = GraphState(nodes=np.arange(nqubit), edges=exp_edges)
+        assert is_graphs_equal(g, exp_g)
+
     def test_local_complement(self, use_rustworkx: bool) -> None:
         nqubit = 6
         edges = [(0, 1), (1, 2), (2, 3), (3, 4), (4, 0)]

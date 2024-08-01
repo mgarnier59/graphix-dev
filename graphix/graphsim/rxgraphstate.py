@@ -134,9 +134,14 @@ class RXGraphState(BaseGraphState):
             eidx = self._graph.add_edge(uidx, vidx, None)
             self.edges.add_edge((self._graph[uidx][0], self._graph[vidx][0]), None, eidx)
 
-    def local_complement(self, node):
-        g = self.subgraph(list(self.neighbors(node)))
+    # add complement method
+    # local complement is just complement(self, list(self.neighbors(node)))
+
+    def complement(self, nodes: list[int]) -> None:
+        "complement the edges between the subgraph given by nodes"
+        g = self.subgraph(list(nodes))
         g_new = rx.complement(g)
+
         g_edge_list = []
         for uidx, vidx in g.edge_list():
             u = g.get_node_data(uidx)[0]
@@ -149,6 +154,28 @@ class RXGraphState(BaseGraphState):
             g_new_eidx_list.append((u, v))
         self.remove_edges_from(g_edge_list)
         self.add_edges_from(g_new_eidx_list)
+
+    # TODO: to be checked
+
+    # new local_complement method
+    # def local_complement(self, node: int) -> None:
+    #     complement(self, list(self.neighbors(node)))
+
+    # def local_complement(self, node: int) -> None:
+    #     g = self.subgraph(list(self.neighbors(node)))
+    #     g_new = rx.complement(g)
+    #     g_edge_list = []
+    #     for uidx, vidx in g.edge_list():
+    #         u = g.get_node_data(uidx)[0]
+    #         v = g.get_node_data(vidx)[0]
+    #         g_edge_list.append((u, v))
+    #     g_new_eidx_list = []
+    #     for uidx, vidx in g_new.edge_list():
+    #         u = g_new.get_node_data(uidx)[0]
+    #         v = g_new.get_node_data(vidx)[0]
+    #         g_new_eidx_list.append((u, v))
+    #     self.remove_edges_from(g_edge_list)
+    #     self.add_edges_from(g_new_eidx_list)
 
     def get_isolates(self) -> list[int]:
         # return list(rx.isolates(self.graph))  # will work with rustworkx>=0.14.0
