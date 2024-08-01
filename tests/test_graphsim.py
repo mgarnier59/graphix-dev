@@ -84,7 +84,8 @@ def meas_op(angle, vop=0, plane=graphix.pauli.Plane.XY, choice=0) -> npt.NDArray
 @pytest.mark.parametrize(
     "use_rustworkx",
     [
-        False,
+        False
+        ,
         pytest.param(
             True,
             marks=pytest.mark.skipif(sys.modules.get("rustworkx") is None, reason="rustworkx not installed"),
@@ -193,6 +194,22 @@ class TestGraphSim:
         g.local_complement(1)
         exp_g = GraphState(nodes=np.arange(nqubit), edges=exp_edges)
         assert is_graphs_equal(g, exp_g)
+
+    def test_pivot(self, use_rustworkx: bool) -> None:
+        nqubit = 6
+        edges = [(0, 1), (1, 2), (2, 3), (3, 4), (4, 0)]
+
+        g = GraphState(nodes=np.arange(nqubit), edges=edges, use_rustworkx=use_rustworkx)
+        print(f"init nodes {g.nodes} edges {g.edges}")
+
+        g.pivot((2, 3))
+        print(f"nodes {g.nodes} edges {g.edges}")
+
+        gp = GraphState(nodes=np.arange(nqubit), edges=edges, use_rustworkx=use_rustworkx)
+        gp.pivot_alt((2,3))
+        print(f"gp nodes {gp.nodes} edges {gp.edges}")
+
+        assert is_graphs_equal(g, gp)
 
 
 @pytest.mark.skipif(sys.modules.get("rustworkx") is None, reason="rustworkx not installed")
