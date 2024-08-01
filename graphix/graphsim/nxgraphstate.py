@@ -102,11 +102,19 @@ class NXGraphState(BaseGraphState):
     def adjacency(self) -> Iterator:
         return self._graph.adjacency()
 
-    def local_complement(self, node):
-        g = self.subgraph(list(self.neighbors(node)))
+    # add complement method. Check works for 2 nodes only
+    # local complement is just complement(self, list(self.neighbors(node)))
+    def complement(self, nodes: list[int]) -> None:
+        g = self.subgraph(nodes)
         g_new = nx.complement(g)
         self.remove_edges_from(g.edges)
         self.add_edges_from(g_new.edges)
+
+    # def local_complement(self, node):
+    #     g = self.subgraph(list(self.neighbors(node)))
+    #     g_new = nx.complement(g)
+    #     self.remove_edges_from(g.edges)
+    #     self.add_edges_from(g_new.edges)
 
     def get_isolates(self) -> list[int]:
         return list(nx.isolates(self.graph))
