@@ -206,7 +206,7 @@ class TestGraphSim:
         print(f"nodes {g.nodes} edges {g.edges}")
 
         gp = GraphState(nodes=np.arange(nqubit), edges=edges, use_rustworkx=use_rustworkx)
-        gp.pivot_alt((2,3))
+        gp.pivot_alt((2, 3))
         print(f"gp nodes {gp.nodes} edges {gp.edges}")
 
         assert is_graphs_equal(g, gp)

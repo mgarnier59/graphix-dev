@@ -155,12 +155,6 @@ class RXGraphState(BaseGraphState):
         self.remove_edges_from(g_edge_list)
         self.add_edges_from(g_new_eidx_list)
 
-    # TODO: to be checked
-
-    # new local_complement method
-    # def local_complement(self, node: int) -> None:
-    #     complement(self, list(self.neighbors(node)))
-
     # def local_complement(self, node: int) -> None:
     #     g = self.subgraph(list(self.neighbors(node)))
     #     g_new = rx.complement(g)

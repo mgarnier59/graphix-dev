@@ -403,13 +403,15 @@ class BaseGraphState(ABC):
             self.flip_sign(node)
 
     # add a CZ method to allow arbitrary inputs.
-    def cz(self, nodes: tuple[int, int]) -> None:
+    def cz(self, node1: int, node2: int) -> None:
         """Apply Z gate to a qubit (node).
 
         Parameters
         ----------
-        nodes : tuple[int, int]
-            graph nodes on which to apply CZ gate
+        node1 : int
+            First graph node on which to apply CZ gate
+        node2 : int
+            Second graph node on which to apply CZ gate
 
         Returns
         ----------
@@ -421,17 +423,15 @@ class BaseGraphState(ABC):
 
         # TODO convert to equivalent reduced graph first !!!! Implemented?
 
-        node1, node2 = nodes[0], nodes[1]  # why linter warning?
-
         # TODO find better format for the conditions
 
         # rule 8: two nodes are solid
         if not self.nodes[node1]["hollow"] and not self.nodes[node2]["hollow"]:
             # need to complement THE EDGE. Implement methods in nx/rxgraphstates?
-            if nodes in self.edges:  # check types are ok for checking
+            if (node1, node2) in self.edges:  # check types are ok for checking will work nx not rx
                 self.remove_edge(node1, node2)
             else:
-                self.add_edges_from(nodes)  # why linter warning?
+                self.add_edges_from([(node1, node2)])  # why linter warning?
 
         # rule 9: one of the two is hollow (mutually exclusive with rule 8)
         # REFACTOR: same code for both branches with different node identification..
@@ -440,11 +440,11 @@ class BaseGraphState(ABC):
             hollow_node, solid_node = node1, node2
 
             # this seems to work
-            target_nodes = list(solid_node) + list(self.neighbors(hollow_node))
+            target_nodes = [solid_node, *list(self.neighbors(hollow_node))]
             self.complement(target_nodes)
 
-            if (nodes in self.edges and not self.nodes[hollow_node]["sign"]) or (
-                nodes not in self.edges and self.nodes[hollow_node]["sign"]
+            if ((node1, node2) in self.edges and not self.nodes[hollow_node]["sign"]) or (
+                (node1, node2) not in self.edges and self.nodes[hollow_node]["sign"]
             ):
                 self.flip_sign(solid_node)
 
@@ -452,18 +452,18 @@ class BaseGraphState(ABC):
             hollow_node, solid_node = node2, node1
 
             # this seems to work
-            target_nodes = list(solid_node) + list(self.neighbors(hollow_node))
+            target_nodes = [solid_node, *list(self.neighbors(hollow_node))]
             self.complement(target_nodes)
 
-            if (nodes in self.edges and not self.nodes[hollow_node]["sign"]) or (
-                nodes not in self.edges and self.nodes[hollow_node]["sign"]
+            if ((node1, node2) in self.edges and not self.nodes[hollow_node]["sign"]) or (
+                (node1, node2) not in self.edges and self.nodes[hollow_node]["sign"]
             ):
                 self.flip_sign(solid_node)
 
         # rule 10: two nodes are hollow (mutually exclusive with rules 8 and 9)
         elif self.nodes[node1]["hollow"] and self.nodes[node2]["hollow"]:
-            # back here HERE when pivot_cz implemented.
-            pass
+            assert (node1, node2) not in self.edges
+            self.pivot_cz((node1, node2))
 
         return
 
@@ -562,7 +562,6 @@ class BaseGraphState(ABC):
 
         return
 
-    # NOTE: check equivalence with other formulation?
     def pivot(self, edge: tuple[int, int]) -> None:
         """Perform pivoting [1]_ a.k.a local complementation along an edge [2]_ of a graph.
         Pivoting along the edge (u,v) means applying local complementation on u then local complementation on
@@ -629,7 +628,7 @@ class BaseGraphState(ABC):
             Alternative implementation.
         """
         # if edge not in self.edges:
-        if edge not in self.edges and edge[::-1] not in set(self.edges):
+        if (edge not in self.edges) and (edge[::-1] not in set(self.edges)):
             raise ValueError("Cannot pivot along an edge that is not an edge of the graph.")
 
         node1 = edge[0]
@@ -658,14 +657,9 @@ class BaseGraphState(ABC):
         self.remove_edges_from(list((node2, i) for i in neighbors_node2_only))
         self.add_edges_from(list((node2, i) for i in neighbors_node1_only))
 
+        # complement the ORIGINAL sets, not the new ones!
+        # neighbors_node1 and neighbors_node_2
         self.complement(list(neighbors_node1) + list(neighbors_node2))
-
-        # naive first version
-        # this is enough for the first couple of sets since does all the nodes that are linked.
-        # for i in neighbors_node1:
-        #     for j in self.neighbors(i):
-        #         if j in neighbors_node2:
-        #             self.complement([i, j])
 
         # neighbors_node1 and neighbors_both
         self.complement(list(neighbors_node1) + list(neighbors_both))
@@ -677,7 +671,7 @@ class BaseGraphState(ABC):
 
     # RESTART HERE
     # doesn't need to be abstract since only depend on flips sign/fill and (local) complementation?
-    def pivot_cz_tmp(self, edge: tuple[int, int]) -> None:
+    def pivot_cz(self, edge: tuple[int, int]) -> None:
         """Modified pivoting (a.k.a local complementation along an edge) for CZ gate application [1]_. We use the alternative formulation from [1]_ [2]_.
         Should only be applied to two hollow nodes. Note that in reduced graph form, two hollow nodes are _never_ connected [1]_.
 
@@ -703,6 +697,7 @@ class BaseGraphState(ABC):
         node1 = edge[0]
         node2 = edge[1]
         # neighborhoods of node1 and node2 without node1 and node 2.
+        # edge between node1 and node 2 unchanged
         neighbors_node1 = set(self.neighbors(node1)) - set([node2])
         neighbors_node2 = set(self.neighbors(node2)) - set([node1])
 
@@ -758,6 +753,22 @@ class BaseGraphState(ABC):
         #     raise ValueError("Cannot pivot along an edge that is not an edge of the graph.")
 
         # find relevant subsets: neighbours of edge[1] only, edge[2] only and edge [1] and edge [2]
+
+        # makes sense to do it here since need the info on the neighbors sets
+        # text not very clear. Trying...
+        # end of rule 10:
+        for i in neighbors_both:
+            self.flip_sign(i)
+
+        # if one or the other have sign, flip neigh of the other
+        # REFACTOR
+        if self.nodes[node1]["sign"]:
+            for i in neighbors_node2_only:  # exclude node1 I suppose.
+                self.flip_sign(i)
+
+        elif self.nodes[node2]["sign"]:
+            for i in neighbors_node1_only:  # exclude node1 I suppose.
+                self.flip_sign(i)
 
         return
 
