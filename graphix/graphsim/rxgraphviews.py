@@ -145,7 +145,14 @@ class EdgeList:
                 continue
             self.add_edge(enum, edata, eidx)
 
-    def remove_edge(self, enum: tuple[int, int]):
+    def remove_edge(self, enum):
+        (u, v) = enum
+        try:
+            self.remove_edge_((u, v))
+        except ValueError:
+            self.remove_edge_((v, u))
+
+    def remove_edge_(self, enum: tuple[int, int]):
         if enum not in self.num_to_data:
             raise ValueError(f"Edge {enum} does not exist")
         self.edges.remove(enum)
