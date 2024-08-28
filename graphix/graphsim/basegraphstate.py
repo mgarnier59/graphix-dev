@@ -467,7 +467,7 @@ class BaseGraphState(ABC):
 
         return
 
-    def equivalent_graph_E1(self, node: int) -> None:
+    def equivalent_graph_e1(self, node: int) -> None:
         """Tranform a graph state to a different graph state
         representing the same stabilizer state.
         This rule applies only to a node with loop.
