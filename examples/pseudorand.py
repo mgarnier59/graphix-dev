@@ -225,7 +225,9 @@ def compute_state_frame_potential_std(
     return res
 
 
-def run(shots: int, rng: Generator, prob: float | None = None) -> tuple[list[np.float64], list[np.float64]]:  # Sequence[BackendState]
+def run(
+    shots: int, rng: Generator, prob: float | None = None
+) -> tuple[list[np.float64], list[np.float64]]:  # Sequence[BackendState]
     measurements1 = {i: Measurement(0, Plane.XY) for i in [1, 3, 5, 7]}
     measurements1.update({i: Measurement(1 / 4, Plane.XY) for i in [0, 2, 6]})
     measurements1.update({8: Measurement(1 / 2, Plane.XY)})
@@ -263,7 +265,9 @@ def run(shots: int, rng: Generator, prob: float | None = None) -> tuple[list[np.
 
     fids = compute_pairwise_fidelities(out_data)
 
-    return [compute_state_frame_potential(fids, t) for t in range(1, 4)], [compute_state_frame_potential_std(fids, t) for t in range(1, 4)]   # out_data
+    return [compute_state_frame_potential(fids, t) for t in range(1, 4)], [
+        compute_state_frame_potential_std(fids, t) for t in range(1, 4)
+    ]  # out_data
 
 
 def plot_result(data: list[tuple[float]], x: Sequence[float], stds: list[tuple[float]]) -> None:
@@ -278,13 +282,13 @@ def plot_result(data: list[tuple[float]], x: Sequence[float], stds: list[tuple[f
     theoretical_values = [1 / math.comb(d + t - 1, t) for t in range(1, 4)]  # Replace with your theoretical values
 
     # Plot each unpacked sequence
-    plt.errorbar(x, curve1, fmt='+', color='red', capsize= 2, elinewidth=.9, yerr=std1, label=r"$t = 1$", ms=10)
-    plt.plot(x, curve2, "bx", label=r"$t = 2$", ms=10)
-    plt.plot(x, curve3, "g2", label=r"$t = 3$", ms=15)
+    plt.errorbar(x, curve1, fmt="+r", capsize=2, elinewidth=0.9, yerr=std1, label=r"$t = 1$", ms=10)
+    plt.errorbar(x, curve2, fmt="bx", capsize=2, elinewidth=0.9, yerr=std2, label=r"$t = 2$", ms=10)
+    plt.errorbar(x, curve3, fmt="g2", capsize=2, elinewidth=0.9, yerr=std3, label=r"$t = 3$", ms=15)
     colors = ["r", "b", "g"]
     # Plot horizontal (theoretical) lines
     for idx, yval in enumerate(theoretical_values):
-        plt.axhline(y=yval, linestyle="--", label=rf"Theory $t={idx + 1}$", color=colors[idx])
+        plt.axhline(y=yval, linestyle="--", label=rf"Lower bound $t={idx + 1}$", color=colors[idx])
 
     plt.legend()
     plt.xlabel("Index")
@@ -314,10 +318,10 @@ if __name__ == "__main__":
     rng = np.random.default_rng()
     res = []
     res_std = []
-    p_vals = np.linspace(0, 1, num=3, endpoint=True)
+    p_vals = np.linspace(0, 1, num=5, endpoint=True)
     for p in tqdm(p_vals):
         print(f"{p=}")
-        data, stds = run(shots=10, rng=rng, prob=p)  # test prob + None and 1 should be the same
+        data, stds = run(shots=500, rng=rng, prob=p)  # test prob + None and 1 should be the same
         res.append(tuple(data))
         res_std.append(tuple(stds))
     print(res)
