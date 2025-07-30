@@ -7,12 +7,14 @@ R. Mezher, J. Ghalbouni, J. Dgheim, and D. Markham, Efficient Quantum Pseudorand
 from __future__ import annotations
 
 from collections.abc import Generator, Sequence
-from itertools import combinations
+from itertools import combinations, starmap
 import math
 from typing import TYPE_CHECKING, Any
-
+import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
+from tqdm import tqdm
+import numpy.typing as npt
 
 from graphix.command import CommandKind, M, Node, X, Z
 from graphix.fundamentals import Plane
@@ -100,7 +102,7 @@ def remove_corrections(pattern: Pattern, rng: Generator, prob: float | None = No
                     s_domain=new_s_domain,
                     t_domain=new_t_domain,
                 )
-
+        # X and Z empty domains : don't apply anything (sum is 0)
         elif command.kind in {CommandKind.X, CommandKind.Z}:
             if prob is None:
                 if command.kind == CommandKind.X:
@@ -153,7 +155,27 @@ def fidelity(state1: Statevec, state2: Statevec) -> float:
     return np.abs(state1.psi.flatten().dot(state2.psi.flatten().conj())) ** 2
 
 
-def compute_state_frame_potential(ens: Sequence[Statevec], k: int) -> np.floating[Any]:  # TODO fix type # also DMs later. Check with TM for backend typing
+def compute_pairwise_fidelities(ens: Sequence[Statevec]) -> npt.NDArray[np.float64]:
+    """computes all pairwise fidelities over an ensemble of pure states
+
+    Parameters
+    ----------
+    ens : Sequence[Statevec]
+        pure state ensemble
+
+    Returns
+    -------
+    npt.NDArray[np.float64]
+        array containing the pairwise fidelities. It's length is n choose k = 2 (without repetion, order doesn't matter).
+    """
+    # starmap is an iterator
+    # fromiter avoid converting to list ninse np.array(iterator) doesn't behave as expected
+    return np.fromiter(starmap(fidelity, combinations(ens, 2)), dtype=np.float64)
+
+
+def compute_state_frame_potential(
+    fidelities: npt.NDArray[np.float64], k: int
+) -> np.float64:  # TODO fix type # also DMs later. Check with TM for backend typing
     """Returns the k-th state frame potential computed over the state ensemble 'ens.
     Applies to Statevecs only so far.
     Computed according to Eq. (4) of
@@ -171,16 +193,39 @@ def compute_state_frame_potential(ens: Sequence[Statevec], k: int) -> np.floatin
     float
         the computed value
     """
-    data: list[float] = []
-    state1: Statevec
-    state2: Statevec
-    for state1, state2 in combinations(ens, 2):
-        data.append(fidelity(state1, state2) ** k)
 
-    return np.mean(np.array(data, dtype=np.float64))
+    # use numpy vectorization
+    res: np.float64 = np.mean(fidelities**k)
+    return res
 
 
-def run(shots: int, rng: Generator, prob: float | None = None) -> Sequence[BackendState]:
+def compute_state_frame_potential_std(
+    fidelities: npt.NDArray[np.float64], k: int
+) -> np.float64:  # TODO fix type # also DMs later. Check with TM for backend typing
+    """Returns the k-th state frame potential computed over the state ensemble 'ens.
+    Applies to Statevecs only so far.
+    Computed according to Eq. (4) of
+    Nakata, Takeuchi, Kliesch and Darmawan, On computational complexity of unitary and state design properties (2024) https://arxiv.org/abs/2410.23353v1
+
+    Parameters
+    ----------
+    ens : Sequence[BackendState]
+        Ensemble over which to compute the frame potentials
+    k : int
+        integer
+
+    Returns
+    -------
+    float
+        the computed value
+    """
+
+    # use numpy vectorization
+    res: np.float64 = np.std(fidelities**k)
+    return res
+
+
+def run(shots: int, rng: Generator, prob: float | None = None) -> tuple[list[np.float64], list[np.float64]]:  # Sequence[BackendState]
     measurements1 = {i: Measurement(0, Plane.XY) for i in [1, 3, 5, 7]}
     measurements1.update({i: Measurement(1 / 4, Plane.XY) for i in [0, 2, 6]})
     measurements1.update({8: Measurement(1 / 2, Plane.XY)})
@@ -195,10 +240,10 @@ def run(shots: int, rng: Generator, prob: float | None = None) -> Sequence[Backe
     # input nodes of p2 to input nodes of p1 :
     mapping = {0: 4, 5: 9}
     pc, _ = p1.compose(p2, mapping)  # mapping_c is need to access it
-    pc.standardize()
+    # pc.standardize()
 
     # reference pattern is deterministic so pick one of its outputs
-    ref = pc.simulate_pattern()
+    # ref = pc.simulate_pattern()
 
     new_patt = remove_corrections(pc, rng, prob)
     # also sample on all possible patterns if exists some probability?
@@ -214,9 +259,37 @@ def run(shots: int, rng: Generator, prob: float | None = None) -> Sequence[Backe
         # fid_data.append(fid)
     # print("mean", np.mean(fid_data))
 
-    print(compute_state_frame_potential(out_data, 1))
+    # print(compute_state_frame_potential(out_data, 1))
 
-    return out_data
+    fids = compute_pairwise_fidelities(out_data)
+
+    return [compute_state_frame_potential(fids, t) for t in range(1, 4)], [compute_state_frame_potential_std(fids, t) for t in range(1, 4)]   # out_data
+
+
+def plot_result(data: list[tuple[float]], x: Sequence[float], stds: list[tuple[float]]) -> None:
+    # data is list of 3-tuples
+
+    # Unpack: Each variable now holds all values of one tuple position
+    curve1, curve2, curve3 = zip(*data)  # Adjust based on your tuple size
+    std1, std2, std3 = zip(*stds)
+    error1 = [[-e, e] for e in std1]
+
+    # Theoretical reference lines for each curve
+    theoretical_values = [1 / math.comb(d + t - 1, t) for t in range(1, 4)]  # Replace with your theoretical values
+
+    # Plot each unpacked sequence
+    plt.errorbar(x, curve1, fmt='+', color='red', capsize= 2, elinewidth=.9, yerr=std1, label=r"$t = 1$", ms=10)
+    plt.plot(x, curve2, "bx", label=r"$t = 2$", ms=10)
+    plt.plot(x, curve3, "g2", label=r"$t = 3$", ms=15)
+    colors = ["r", "b", "g"]
+    # Plot horizontal (theoretical) lines
+    for idx, yval in enumerate(theoretical_values):
+        plt.axhline(y=yval, linestyle="--", label=rf"Theory $t={idx + 1}$", color=colors[idx])
+
+    plt.legend()
+    plt.xlabel("Index")
+    plt.ylabel("Value")
+    plt.show()
 
 
 # TODO
@@ -228,14 +301,29 @@ def run(shots: int, rng: Generator, prob: float | None = None) -> Sequence[Backe
 # need to find minimal value for design (which it has to be)
 # also look at Briegel and Raussendorf papers
 
+# import logging
+
+# logger = logging.getLogger(__name__)
+
 
 if __name__ == "__main__":
-    print("in pseudorand")
+    # logging.basicConfig(filename='myapp.log', level=logging.INFO)
+    # logger.info('Started')
     d = 4
-    t = 1
+    # t = 3
     rng = np.random.default_rng()
-    data = run(shots=100, rng=rng, prob=0.05)  # test prob + None and 1 should be the same
-    print(f"analytical lower bound {1/math.comb(d + t - 1, t)}")
+    res = []
+    res_std = []
+    p_vals = np.linspace(0, 1, num=3, endpoint=True)
+    for p in tqdm(p_vals):
+        print(f"{p=}")
+        data, stds = run(shots=10, rng=rng, prob=p)  # test prob + None and 1 should be the same
+        res.append(tuple(data))
+        res_std.append(tuple(stds))
+    print(res)
+    print(f"analytical lower bounds {[1 / math.comb(d + t - 1, t) for t in range(1, 4)]}")
+    plot_result(data=res, x=p_vals, stds=res_std)
+    # logger.info('Finished')
     # print(len(data), data[0:2])
     # nx.draw_networkx(graph, with_labels=True) # add layers https://networkx.org/documentation/stable/reference/generated/networkx.drawing.layout.multipartite_layout.html
     # plt.show()
