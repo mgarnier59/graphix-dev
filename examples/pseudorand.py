@@ -6,24 +6,28 @@ R. Mezher, J. Ghalbouni, J. Dgheim, and D. Markham, Efficient Quantum Pseudorand
 # TODO plot state framepotential from https://arxiv.org/abs/2410.23353v1 Eq 4 as a function of probability and k
 from __future__ import annotations
 
-from collections.abc import Generator, Sequence
-from itertools import combinations, starmap
 import math
-from typing import TYPE_CHECKING, Any
+from itertools import combinations, starmap
+from typing import TYPE_CHECKING
+
 import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
-from tqdm import tqdm
 import numpy.typing as npt
+from tqdm import tqdm
 
-from graphix.command import CommandKind, M, Node, X, Z
+from graphix.command import Command, CommandKind, M, Node, X, Z
 from graphix.fundamentals import Plane
 from graphix.measurements import Measurement
 from graphix.opengraph import OpenGraph
 from graphix.pattern import Pattern
+from graphix.sim.statevec import StatevectorBackend
 
 if TYPE_CHECKING:
-    from graphix.sim.base_backend import BackendState
+    from collections.abc import Sequence
+
+    from numpy.random import Generator
+
     from graphix.sim.statevec import Statevec
 
 # TODO: use gospel brickwork transpiler
@@ -58,7 +62,7 @@ def build_brickwork_pattern(meas: dict[int, Measurement]) -> Pattern:
     return OpenGraph(inside_graph, meas, inputs, outputs).to_pattern()
 
 
-def remove_corrections(pattern: Pattern, rng: Generator, prob: float | None = None) -> Pattern:
+def remove_corrections(pattern: Pattern, rng: Generator, prob: float) -> Pattern:
     """_summary_
 
     Parameters
@@ -77,7 +81,7 @@ def remove_corrections(pattern: Pattern, rng: Generator, prob: float | None = No
     # can modify pattern in place?
     # prob is prob to remove
 
-    new_pattern = Pattern(input_nodes=[0, 5])
+    new_pattern = Pattern(input_nodes=pattern.input_nodes)
 
     for command in pattern:
         # don't modify preparations and entanglements
@@ -85,44 +89,32 @@ def remove_corrections(pattern: Pattern, rng: Generator, prob: float | None = No
         if command.kind == CommandKind.M:
             s_domain, t_domain = command.s_domain, command.t_domain
 
-            if prob is None:
-                new_command = M(
-                    node=command.node, plane=command.plane, angle=command.angle, s_domain=set(), t_domain=set()
-                )
-            else:
-                # print("start prob")
-                new_s_domain, new_t_domain = (
-                    remove_corr_util(s_domain, prob, rng),
-                    remove_corr_util(t_domain, prob, rng),
-                )
-                new_command = M(
-                    node=command.node,
-                    plane=command.plane,
-                    angle=command.angle,
-                    s_domain=new_s_domain,
-                    t_domain=new_t_domain,
-                )
+            # print("start prob")
+            new_s_domain, new_t_domain = (
+                remove_corr_util(s_domain, prob, rng),
+                remove_corr_util(t_domain, prob, rng),
+            )
+            new_command: Command = M(
+                node=command.node,
+                plane=command.plane,
+                angle=command.angle,
+                s_domain=new_s_domain,
+                t_domain=new_t_domain,
+            )
         # X and Z empty domains : don't apply anything (sum is 0)
-        elif command.kind in {CommandKind.X, CommandKind.Z}:
-            if prob is None:
-                if command.kind == CommandKind.X:
-                    new_command = X(node=command.node, domain=set())
+        elif command.kind == CommandKind.X or command.kind == CommandKind.Z:  # noqa: PLR1714
+            new_domain = remove_corr_util(command.domain, prob, rng)
 
-                elif command.kind == CommandKind.Z:
-                    new_command = Z(node=command.node, domain=set())
-            else:
-                new_domain = remove_corr_util(command.domain, prob, rng)
-
-                if command.kind == CommandKind.X:
-                    new_command = X(node=command.node, domain=new_domain)
-                elif command.kind == CommandKind.Z:
-                    new_command = Z(node=command.node, domain=new_domain)
+            if command.kind == CommandKind.X:
+                new_command = X(node=command.node, domain=new_domain)
+            else:  # not X then Z
+                new_command = Z(node=command.node, domain=new_domain)
 
         else:
             new_command = command  # type issue for some reason
 
         # print(command, new_pattern.output_nodes)
-        new_pattern.add(new_command)  # type issue for some reason
+        new_pattern.add(new_command)  # type OK: exhaust all cases
 
     return new_pattern
 
@@ -145,14 +137,14 @@ def remove_corr_util(
         updated set
     """
     # only keep if drawn number is larger
-    return {i for i in domain if rng.random() > prob}  # type: ignore
+    return {i for i in domain if rng.random() > prob}
 
 
 # cache to avoid recomputing? or too big?
 
 
 def fidelity(state1: Statevec, state2: Statevec) -> float:
-    return np.abs(state1.psi.flatten().dot(state2.psi.flatten().conj())) ** 2
+    return float(np.abs(state1.psi.flatten().dot(state2.psi.flatten().conj())) ** 2)
 
 
 def compute_pairwise_fidelities(ens: Sequence[Statevec]) -> npt.NDArray[np.float64]:
@@ -175,7 +167,7 @@ def compute_pairwise_fidelities(ens: Sequence[Statevec]) -> npt.NDArray[np.float
 
 def compute_state_frame_potential(
     fidelities: npt.NDArray[np.float64], k: int
-) -> np.float64:  # TODO fix type # also DMs later. Check with TM for backend typing
+) -> float:  # TODO fix type # also DMs later. Check with TM for backend typing
     """Returns the k-th state frame potential computed over the state ensemble 'ens.
     Applies to Statevecs only so far.
     Computed according to Eq. (4) of
@@ -195,13 +187,12 @@ def compute_state_frame_potential(
     """
 
     # use numpy vectorization
-    res: np.float64 = np.mean(fidelities**k)
-    return res
+    return float(np.mean(fidelities**k))
 
 
 def compute_state_frame_potential_std(
     fidelities: npt.NDArray[np.float64], k: int
-) -> np.float64:  # TODO fix type # also DMs later. Check with TM for backend typing
+) -> float:  # TODO fix type # also DMs later. Check with TM for backend typing
     """Returns the k-th state frame potential computed over the state ensemble 'ens.
     Applies to Statevecs only so far.
     Computed according to Eq. (4) of
@@ -221,13 +212,10 @@ def compute_state_frame_potential_std(
     """
 
     # use numpy vectorization
-    res: np.float64 = np.std(fidelities**k)
-    return res
+    return float(np.std(fidelities**k))
 
 
-def run(
-    shots: int, rng: Generator, prob: float | None = None
-) -> tuple[list[np.float64], list[np.float64]]:  # Sequence[BackendState]
+def build_gadget(n: int) -> Pattern:
     measurements1 = {i: Measurement(0, Plane.XY) for i in [1, 3, 5, 7]}
     measurements1.update({i: Measurement(1 / 4, Plane.XY) for i in [0, 2, 6]})
     measurements1.update({8: Measurement(1 / 2, Plane.XY)})
@@ -239,24 +227,76 @@ def run(
     p1 = build_brickwork_pattern(measurements1)
     p2 = build_brickwork_pattern(measurements2)
 
+    # building the "B" block
     # input nodes of p2 to input nodes of p1 :
-    mapping = {0: 4, 5: 9}
-    pc, _ = p1.compose(p2, mapping)  # mapping_c is need to access it
-    # pc.standardize()
+    pc, mapping_c = p1.compose(p2, {0: 4, 5: 9})  # mapping_c is needed to access it
+    patt_B, mapping_B = pc.compose(p1, {0: mapping_c[4], 5: mapping_c[9]})
 
-    # reference pattern is deterministic so pick one of its outputs
-    # ref = pc.simulate_pattern()
+    if n < 2:
+        raise ValueError("Not possible")
 
-    new_patt = remove_corrections(pc, rng, prob)
+    if n == 2:
+        return patt_B
+
+    patt_BB, mapping_BB = patt_B.compose(patt_B, {0: mapping_B[9]})
+
+    patt_acc = patt_BB
+    # compose renvoie un nouveau patter (fonctionnel)
+    # compose: a gauche celui qui a les sorties à brancher sur les entrées
+    # starts at n = 5
+    for _ in range(0, (n - 1) // 2 - 1):  # start from BB and count number of BB to add
+        patt_next, mapping = patt_BB.compose(patt_acc, {mapping_BB[5]: mapping_B[4]})
+        # mapping_BB[5] alwayssince always compose with BB
+        # One less node since merge them
+        # reorder checks that reordering is a permutation so we don't miss nodes
+        patt_next.reorder_output_nodes([mapping[i] for i in patt_acc.output_nodes] + patt_BB.output_nodes[1:])
+        patt_next.reorder_input_nodes(
+            [mapping[i] for i in patt_acc.input_nodes[:-1]] + patt_BB.input_nodes
+        )  # last input patt_acc is merged, all inputs patt_BB kept
+        patt_acc = patt_next  # Compose create new patterns. Copies anyhere else.
+    # patt_acc: patt_BB
+
+    if n % 2 == 0:
+        patt_next, mapping = patt_B.compose(patt_acc, {mapping_BB[5]: mapping_B[4]})
+        patt_next.reorder_output_nodes([mapping[i] for i in patt_acc.output_nodes] + patt_B.output_nodes[1:])
+        patt_next.reorder_input_nodes([mapping[i] for i in patt_acc.input_nodes[:-1]] + patt_B.input_nodes)
+        patt_acc = patt_next
+
+    # nothing to do for n = 3
+
+    return patt_acc
+
+
+def build_E(nqubits: int, nlayers: int) -> Pattern:
+    gadget_pattern = build_gadget(nqubits)
+
+    patt_acc = Pattern(input_nodes=range(nqubits))
+
+    for _ in range(nlayers):
+        # two ways are OK by symmetry
+        # patt_acc output nodes were reordered. They're merged. So only new outputs. Compose keeps order within a pattern.
+        patt_acc, _ = patt_acc.compose(gadget_pattern, dict(zip(gadget_pattern.input_nodes, patt_acc.output_nodes)))
+
+    return patt_acc
+
+
+def run(
+    nqubits: int, nlayers: int, shots: int, rng: Generator, prob: float
+) -> tuple[list[float], list[float]]:  # Sequence[BackendState]
+    # patt = build_gadget(n=nqubits)
+    patt = build_E(nqubits=nqubits, nlayers=nlayers)
+    new_patt = remove_corrections(patt, rng, prob)
     # also sample on all possible patterns if exists some probability?
     # For now just focus on prob = None
     # check determinism
-    out_data = []
+
+    out_data: list[Statevec] = []  # Statevec subtype of BackendState but don't know it before simulator is selected
     for _ in range(shots):
+        backend = StatevectorBackend()
         # compute probability by default
         # no need to reinitialise the backend, it's done internally
-        out = new_patt.simulate_pattern()
-        out_data.append(out)  # TODO solve typing issue cast as Statevec?
+        new_patt.simulate_pattern(backend=backend)
+        out_data.append(backend.state)  # TODO solve typing issue cast as Statevec?
         # fid = np.abs(out.psi.flatten().dot(ref.psi.flatten().conj())) ** 2
         # fid_data.append(fid)
     # print("mean", np.mean(fid_data))
@@ -264,19 +304,19 @@ def run(
     # print(compute_state_frame_potential(out_data, 1))
 
     fids = compute_pairwise_fidelities(out_data)
+    print(f"{fids=}")
 
     return [compute_state_frame_potential(fids, t) for t in range(1, 4)], [
         compute_state_frame_potential_std(fids, t) for t in range(1, 4)
     ]  # out_data
 
 
-def plot_result(data: list[tuple[float]], x: Sequence[float], stds: list[tuple[float]]) -> None:
+def plot_result(data: list[list[float]], x: npt.NDArray[np.float64], stds: list[list[float]]) -> None:
     # data is list of 3-tuples
 
     # Unpack: Each variable now holds all values of one tuple position
     curve1, curve2, curve3 = zip(*data)  # Adjust based on your tuple size
     std1, std2, std3 = zip(*stds)
-    error1 = [[-e, e] for e in std1]
 
     # Theoretical reference lines for each curve
     theoretical_values = [1 / math.comb(d + t - 1, t) for t in range(1, 4)]  # Replace with your theoretical values
@@ -288,11 +328,12 @@ def plot_result(data: list[tuple[float]], x: Sequence[float], stds: list[tuple[f
     colors = ["r", "b", "g"]
     # Plot horizontal (theoretical) lines
     for idx, yval in enumerate(theoretical_values):
-        plt.axhline(y=yval, linestyle="--", label=rf"Lower bound $t={idx + 1}$", color=colors[idx])
+        plt.axhline(y=yval, linestyle=":", label=rf"Lower bound $t={idx + 1}$", color=colors[idx])
 
     plt.legend()
-    plt.xlabel("Index")
-    plt.ylabel("Value")
+    plt.xlabel("Correction removal probability")
+    plt.ylabel(r"$F_t$")
+    plt.title(f"State frame potential for n = {nqb} qubits, {nlayers} layers and {nshots} shots")
     plt.show()
 
 
@@ -313,17 +354,24 @@ def plot_result(data: list[tuple[float]], x: Sequence[float], stds: list[tuple[f
 if __name__ == "__main__":
     # logging.basicConfig(filename='myapp.log', level=logging.INFO)
     # logger.info('Started')
-    d = 4
+    # this is global
+    # put everything in function! main
+    nqb = 4
+    nlayers = 2
+    d = 2**nqb
+    nshots = 100
     # t = 3
     rng = np.random.default_rng()
-    res = []
-    res_std = []
-    p_vals = np.linspace(0, 1, num=5, endpoint=True)
+    res: list[list[float]] = []
+    res_std: list[list[float]] = []
+    p_vals = np.linspace(1, 1, num=1, endpoint=True)
     for p in tqdm(p_vals):
         print(f"{p=}")
-        data, stds = run(shots=500, rng=rng, prob=p)  # test prob + None and 1 should be the same
-        res.append(tuple(data))
-        res_std.append(tuple(stds))
+        data, stds = run(
+            nqubits=nqb, nlayers=nlayers, shots=nshots, rng=rng, prob=p
+        )  # test prob + None and 1 should be the same
+        res.append(data)
+        res_std.append(stds)
     print(res)
     print(f"analytical lower bounds {[1 / math.comb(d + t - 1, t) for t in range(1, 4)]}")
     plot_result(data=res, x=p_vals, stds=res_std)
