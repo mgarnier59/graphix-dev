@@ -357,14 +357,14 @@ if __name__ == "__main__":
     # this is global
     # put everything in function! main
     nqb = 4
-    nlayers = 2
+    nlayers = 3
     d = 2**nqb
     nshots = 100
     # t = 3
     rng = np.random.default_rng()
     res: list[list[float]] = []
     res_std: list[list[float]] = []
-    p_vals = np.linspace(1, 1, num=1, endpoint=True)
+    p_vals = np.linspace(0, 1, num=4, endpoint=True)
     for p in tqdm(p_vals):
         print(f"{p=}")
         data, stds = run(
